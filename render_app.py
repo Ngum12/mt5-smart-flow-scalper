@@ -7,16 +7,9 @@ from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-
-# Check if we're in render environment
-is_render = os.environ.get('DEPLOY_ENV') == 'render'
-
-# Only try to import MT5 if we're not in render
-if not is_render:
-    try:
-        import MetaTrader5 as mt5
-    except ImportError:
-        print("MetaTrader5 module not found, running in demo mode")
+import requests
+import json
+import traceback
 
 # Theme colors (same as your original app)
 DARK_THEME = {
@@ -29,6 +22,13 @@ DARK_THEME = {
     'header': '#303030',
     'accent': '#00B7FF'
 }
+
+# Configure your Windows VPS API endpoint
+API_URL = os.environ.get('MT5_API_URL', 'http://your-windows-vps-ip:5000/api')
+
+# Initialize sample data in case API is unreachable
+sample_data = pd.DataFrame()
+connection_status = "Disconnected"
 
 # Sample data generator (for demo when MT5 is not available)
 def generate_demo_data():
@@ -138,7 +138,7 @@ app.layout = html.Div(style={
     'fontFamily': 'Segoe UI, Roboto, sans-serif',
     'padding': '20px'
 }, children=[
-    # Header
+    # Header with API connection controls
     html.Div(style={
         'backgroundColor': DARK_THEME['header'],
         'padding': '20px',
@@ -153,15 +153,34 @@ app.layout = html.Div(style={
         html.H3(id='symbol-title', children="GainX 800 (M5 Timeframe)", style={
             'marginTop': '0'
         }),
-        html.Div("DEMO MODE - Not connected to MT5", style={
-            'backgroundColor': DARK_THEME['sell'],
-            'padding': '5px 10px',
-            'borderRadius': '4px',
-            'display': 'inline-block',
-            'marginTop': '10px',
-            'fontSize': '12px',
-            'fontWeight': 'bold'
-        }),
+        html.Div(style={'display': 'flex', 'alignItems': 'center', 'marginTop': '10px'}, children=[
+            html.Div(id='connection-status', style={
+                'backgroundColor': DARK_THEME['sell'],  # Will update based on connection
+                'padding': '5px 10px',
+                'borderRadius': '4px',
+                'marginRight': '15px',
+                'fontWeight': 'bold'
+            }),
+            html.Button("Connect", id='connect-button', style={
+                'backgroundColor': DARK_THEME['buy'],
+                'color': 'white',
+                'border': 'none',
+                'padding': '8px 15px',
+                'borderRadius': '4px',
+                'cursor': 'pointer',
+                'marginRight': '10px'
+            }),
+            html.Button("Disconnect", id='disconnect-button', style={
+                'backgroundColor': DARK_THEME['sell'],
+                'color': 'white',
+                'border': 'none',
+                'padding': '8px 15px',
+                'borderRadius': '4px',
+                'cursor': 'pointer'
+            }),
+            # Hidden elements to store API status
+            dcc.Store(id='api-status', data='disconnected'),
+        ])
     ]),
     
     # Main content
@@ -301,6 +320,43 @@ app.layout = html.Div(style={
     ]),
 ])
 
+# Create callbacks for API connection
+@app.callback(
+    [Output('api-status', 'data'),
+     Output('connection-status', 'children'),
+     Output('connection-status', 'style')],
+    [Input('connect-button', 'n_clicks'),
+     Input('disconnect-button', 'n_clicks')],
+    prevent_initial_call=True
+)
+def handle_connection(connect_clicks, disconnect_clicks):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return 'disconnected', 'Disconnected', {'backgroundColor': DARK_THEME['sell'], 'padding': '5px 10px', 'borderRadius': '4px', 'marginRight': '15px', 'fontWeight': 'bold'}
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if button_id == 'connect-button':
+        try:
+            # Try to start the strategy via API
+            response = requests.post(f"{API_URL}/start", timeout=10)
+            if response.status_code == 200 and response.json().get('success'):
+                return 'connected', 'Connected to MT5', {'backgroundColor': DARK_THEME['buy'], 'padding': '5px 10px', 'borderRadius': '4px', 'marginRight': '15px', 'fontWeight': 'bold'}
+            else:
+                return 'error', f"Error: {response.json().get('message')}", {'backgroundColor': '#FFA500', 'padding': '5px 10px', 'borderRadius': '4px', 'marginRight': '15px', 'fontWeight': 'bold'}
+        except Exception as e:
+            return 'error', f"Connection Error: {str(e)}", {'backgroundColor': '#FFA500', 'padding': '5px 10px', 'borderRadius': '4px', 'marginRight': '15px', 'fontWeight': 'bold'}
+    
+    elif button_id == 'disconnect-button':
+        try:
+            requests.post(f"{API_URL}/stop", timeout=10)
+            return 'disconnected', 'Disconnected', {'backgroundColor': DARK_THEME['sell'], 'padding': '5px 10px', 'borderRadius': '4px', 'marginRight': '15px', 'fontWeight': 'bold'}
+        except:
+            return 'disconnected', 'Disconnected', {'backgroundColor': DARK_THEME['sell'], 'padding': '5px 10px', 'borderRadius': '4px', 'marginRight': '15px', 'fontWeight': 'bold'}
+    
+    return 'disconnected', 'Disconnected', {'backgroundColor': DARK_THEME['sell'], 'padding': '5px 10px', 'borderRadius': '4px', 'marginRight': '15px', 'fontWeight': 'bold'}
+
+# Update your main dashboard callback to fetch from API
 @app.callback(
     [Output('price-chart', 'figure'),
      Output('current-price', 'children'),
@@ -317,10 +373,31 @@ app.layout = html.Div(style={
      Output('live-price', 'children'),
      Output('live-price', 'style')],
     [Input('interval-component', 'n_intervals'),
-     Input('refresh-button', 'n_clicks')]
+     Input('refresh-button', 'n_clicks'),
+     Input('api-status', 'data')]
 )
-def update_dashboard(n_intervals, n_clicks):
-    # Generate slightly new data each time for the demo
+def update_dashboard(n_intervals, n_clicks, api_status):
+    if api_status == 'connected':
+        try:
+            # Get data from real MT5 via API
+            response = requests.get(f"{API_URL}/data", timeout=10)
+            if response.status_code == 200 and response.json().get('success'):
+                data = response.json()
+                
+                # Process data and create chart
+                # ...rest of your code using real MT5 data...
+            else:
+                # Fall back to demo data
+                return generate_demo_data_response()
+        except Exception as e:
+            print(f"API Error: {str(e)}")
+            traceback.print_exc()
+            return generate_demo_data_response()
+    else:
+        # Not connected, use demo data
+        return generate_demo_data_response()
+
+def generate_demo_data_response():
     global sample_data
     
     # Add a new row at the end with some random walk for price
