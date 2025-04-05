@@ -1,3 +1,4 @@
+import os
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output
@@ -6,8 +7,16 @@ from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import os
-import json
+
+# Check if we're in render environment
+is_render = os.environ.get('DEPLOY_ENV') == 'render'
+
+# Only try to import MT5 if we're not in render
+if not is_render:
+    try:
+        import MetaTrader5 as mt5
+    except ImportError:
+        print("MetaTrader5 module not found, running in demo mode")
 
 # Theme colors (same as your original app)
 DARK_THEME = {
