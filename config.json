@@ -1,0 +1,26 @@
+{
+    "api_key": "your_api_key_here",
+    "account_number": "your_account_number_here",
+    "leverage": 100,
+    "risk_per_trade": 0.02,
+    "trade_size": 0.1,
+    "slippage": 3,
+    "timeframe": "M1",
+    "indicators": {
+        "ema_period": 14,
+        "macd_fast": 12,
+        "macd_slow": 26,
+        "macd_signal": 9,
+        "rsi_period": 14,
+        "rsi_overbought": 70,
+        "rsi_oversold": 30
+    },
+    "trade_conditions": {
+        "buy_condition": "ema_cross_up",
+        "sell_condition": "ema_cross_down"
+    },
+    "logging": {
+        "log_level": "INFO",
+        "log_file": "trading_log.txt"
+    }
+}
