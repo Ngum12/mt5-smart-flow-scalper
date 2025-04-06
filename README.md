@@ -1,8 +1,3 @@
-Here’s a **cleaned and well-structured `README.md`** version for your GitHub project:
-
----
-
-```markdown
 # MT5 Smart Flow Scalper
 
 A sophisticated algorithmic trading system for MetaTrader 5 featuring adaptive technical analysis, real-time signal generation, and a comprehensive web dashboard for monitoring trades.
@@ -68,126 +63,138 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Make sure MetaTrader 5 is running with AutoTrading enabled
-```
-
----
-
-## 📊 Dashboard Guide
-
+📊 Dashboard Guide
 The dashboard provides a full overview of your trading performance.
 
-![Dashboard Overview](https://via.placeholder.com/800x400?text=Dashboard+Overview)
 
-### Key Components:
 
-- **Symbol Selector** – Choose between instruments (GainX/PainX)
-- **Price Chart** – Candlestick chart with EMA, RSI, MACD
-- **Signal Panel** – Shows real-time signals
-- **Trade History** – Recent trades and results
-- **Performance Stats** – Win rate, profit factor, etc.
-- **AI Assistant** – Offers real-time market insights
+Key Components:
+Symbol Selector – Choose between instruments (GainX/PainX)
 
----
+Price Chart – Candlestick chart with EMA, RSI, MACD
 
-## ⚙️ Trading Logic
+Signal Panel – Shows real-time signals
 
-### 🔵 Entry Signals
+Trade History – Recent trades and results
 
-#### BUY:
-- EMA short crosses above EMA long
-- RSI exits oversold zone
-- MACD line crosses above signal line
+Performance Stats – Win rate, profit factor, etc.
 
-#### SELL:
-- EMA short crosses below EMA long
-- RSI exits overbought zone
-- MACD line crosses below signal line
+AI Assistant – Offers real-time market insights
 
-### 🟡 Exit Mechanisms
+⚙️ Trading Logic
+🔵 Entry Signals
+BUY:
+EMA short crosses above EMA long
 
-#### ✅ Take Profit:
-- Automatic based on risk-reward & ATR
-- Formula:
-  - BUY: `TP = entry + (ATR × multiplier × RR)`
-  - SELL: `TP = entry - (ATR × multiplier × RR)`
+RSI exits oversold zone
 
-#### ❌ Stop Loss:
-- ATR-based to match market volatility
-- Formula:
-  - BUY: `SL = entry - (ATR × multiplier)`
-  - SELL: `SL = entry + (ATR × multiplier)`
+MACD line crosses above signal line
 
-#### 🔄 Trailing Stop:
-- Moves SL in the direction of profit
-- Locks in profits while staying in trend
+SELL:
+EMA short crosses below EMA long
 
----
+RSI exits overbought zone
 
-## 📌 Symbol Information
+MACD line crosses below signal line
 
-| Symbol      | Bias    | Volatility     | Lot Size     | Description                          |
-|-------------|---------|----------------|--------------|--------------------------------------|
-| GainX 800   | Bullish | High           | 0.01–0.05    | High volatility, bullish bias        |
-| GainX 600   | Bullish | Medium-high    | 0.02–0.10    | Medium-high volatility               |
-| GainX 400   | Bullish | Medium         | 0.05–0.20    | Balanced volatility                  |
-| GainX 999   | Bullish | Very high      | 0.01–0.03    | Very high volatility                 |
-| GainX 1200  | Bullish | Extreme        | 0.01         | Extreme volatility                   |
-| PainX 800   | Bearish | High           | 0.01–0.05    | High volatility, bearish bias        |
-| PainX 600   | Bearish | Medium-high    | 0.02–0.10    | Medium-high volatility               |
-| PainX 999   | Bearish | Very high      | 0.01–0.03    | Very high volatility                 |
-| PainX 1200  | Bearish | Extreme        | 0.01         | Extreme volatility                   |
+🟡 Exit Mechanisms
+✅ Take Profit:
+Automatic based on risk-reward & ATR
 
----
+Formula:
 
-## 🛡️ Risk Management
+BUY: TP = entry + (ATR × multiplier × RR)
 
-### 📐 Dynamic Position Sizing
+SELL: TP = entry - (ATR × multiplier × RR)
+
+❌ Stop Loss:
+ATR-based to match market volatility
+
+Formula:
+
+BUY: SL = entry - (ATR × multiplier)
+
+SELL: SL = entry + (ATR × multiplier)
+
+🔄 Trailing Stop:
+Moves SL in the direction of profit
+
+Locks in profits while staying in trend
+
+📌 Symbol Information
+Symbol	Bias	Volatility	Lot Size	Description
+GainX 800	Bullish	High	0.01–0.05	High volatility, bullish bias
+GainX 600	Bullish	Medium-high	0.02–0.10	Medium-high volatility
+GainX 400	Bullish	Medium	0.05–0.20	Balanced volatility
+GainX 999	Bullish	Very high	0.01–0.03	Very high volatility
+GainX 1200	Bullish	Extreme	0.01	Extreme volatility
+PainX 800	Bearish	High	0.01–0.05	High volatility, bearish bias
+PainX 600	Bearish	Medium-high	0.02–0.10	Medium-high volatility
+PainX 999	Bearish	Very high	0.01–0.03	Very high volatility
+PainX 1200	Bearish	Extreme	0.01	Extreme volatility
+🛡️ Risk Management
+📐 Dynamic Position Sizing
 Calculated using:
-- Account balance
-- Defined risk % (default: 1%)
-- SL distance (in pips)
-- Tick value
 
-### 📊 Volatility-Based Stops
-- ATR-based TP and SL
-- Wider stops = more volatility
-- Tighter stops = low volatility
+Account balance
 
-### 🔁 Adaptable Parameters
-- EMA, RSI, MACD adjusted based on symbol
-- Behavior adapts to trending vs choppy markets
+Defined risk % (default: 1%)
 
----
+SL distance (in pips)
 
-## 🛠️ Troubleshooting
+Tick value
 
-### 🔴 AutoTrading Disabled
-- Log shows: *"AutoTrading disabled by client"*
-- Fix:
-  - Open MT5
-  - Click the “AutoTrading” button or press `Alt+T`
+📊 Volatility-Based Stops
+ATR-based TP and SL
 
-### 🔌 Connection Issues
-- Log shows: *"MT5: Disconnected"*
-- Fix:
-  - Ensure MT5 is running
-  - Restart your app
-  - Recheck login credentials
+Wider stops = more volatility
 
-### ⚠️ Max Positions Error
-- Log shows: *"position would exceed maximum positions"*
-- Fix:
-  - Close some trades in MT5
-  - Reduce max position config
-  - Check your broker's limits
+Tighter stops = low volatility
 
----
+🔁 Adaptable Parameters
+EMA, RSI, MACD adjusted based on symbol
 
-## 📄 License
+Behavior adapts to trending vs choppy markets
 
-This project is licensed under the [MIT License](LICENSE).  
-© 2025 **MT5 Smart Flow Scalper**. All rights reserved.
-```
+🛠️ Troubleshooting
+🔴 AutoTrading Disabled
+Log shows: "AutoTrading disabled by client"
+
+Fix:
+
+Open MT5
+
+Click the “AutoTrading” button or press Alt+T
+
+🔌 Connection Issues
+Log shows: "MT5: Disconnected"
+
+Fix:
+
+Ensure MT5 is running
+
+Restart your app
+
+Recheck login credentials
+
+⚠️ Max Positions Error
+Log shows: "position would exceed maximum positions"
+
+Fix:
+
+Close some trades in MT5
+
+Reduce max position config
+
+Check your broker's limits
+
+📄 License
+This project is licensed under the MIT License.
+© 2025 MT5 Smart Flow Scalper. All rights reserved.
+
+yaml
+Copy
+Edit
 
 ---
 
