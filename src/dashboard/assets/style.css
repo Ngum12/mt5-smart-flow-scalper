@@ -1,0 +1,41 @@
+
+    /* Signal animations */
+    @keyframes pulse-buy {
+        0% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(0, 200, 83, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0); }
+    }
+    
+    @keyframes pulse-sell {
+        0% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(255, 23, 68, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); }
+    }
+    
+    /* Add animation classes to dashboard */
+    .buy-signal {
+        animation: pulse-buy 2s infinite;
+    }
+    
+    .sell-signal {
+        animation: pulse-sell 2s infinite;
+    }
+    
+    /* Improve chart visibility */
+    .js-plotly-plot .plotly .modebar {
+        background-color: rgba(42, 42, 42, 0.7) !important;
+    }
+    
+    /* Improve price display */
+    .price-up {
+        color: #00C853;
+        font-weight: bold;
+        transition: all 0.3s ease;
+    }
+    
+    .price-down {
+        color: #FF1744;
+        font-weight: bold;
+        transition: all 0.3s ease;
+    }
+    

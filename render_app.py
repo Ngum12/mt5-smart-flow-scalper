@@ -30,6 +30,39 @@ API_URL = os.environ.get('MT5_API_URL', 'http://your-windows-vps-ip:5000/api')
 sample_data = pd.DataFrame()
 connection_status = "Disconnected"
 
+# Add near the top of the file
+AVAILABLE_SYMBOLS = [
+    "GainX 800",
+    "PainX 800",
+    "GainX 600",
+    "PainX 600",
+    "GainX 400",
+    "PainX 999",
+    "GainX 999",
+    "PainX 1200",
+    "GainX 1200"
+]
+
+# Symbol-specific settings
+SYMBOL_SETTINGS = {
+    # GainX series (bullish bias)
+    "GainX 800": {
+        "color": "#26A69A",  # Green
+        "bias": "bullish",
+        "volatility": "high",
+        "recommended_lot": "0.01-0.05",
+        "description": "High volatility with bullish bias"
+    },
+    "GainX 600": {
+        "color": "#4CAF50",  # Green variant
+        "bias": "bullish",
+        "volatility": "medium-high",
+        "recommended_lot": "0.02-0.10",
+        "description": "Medium-high volatility with bullish bias"
+    },
+    # Add the rest of the symbols as shown in my previous response
+}
+
 # Sample data generator (for demo when MT5 is not available)
 def generate_demo_data():
     """Generate simulated price data"""
@@ -129,7 +162,11 @@ sample_trades = [
 ]
 
 # Create the Dash app
-app = dash.Dash(__name__, title="Smart Flow Scalper Dashboard")
+app = dash.Dash(
+    __name__, 
+    title="Smart Flow Scalper Dashboard",
+    assets_folder="assets"  # This will allow loading of styles.css
+)
 server = app.server  # Needed for Render deployment
 
 app.layout = html.Div(style={
@@ -146,13 +183,31 @@ app.layout = html.Div(style={
         'marginBottom': '20px',
         'boxShadow': '0 4px 6px rgba(0, 0, 0, 0.1)'
     }, children=[
-        html.H1("Smart Flow Scalper Dashboard", style={
-            'marginBottom': '5px',
-            'color': DARK_THEME['accent']
-        }),
-        html.H3(id='symbol-title', children="GainX 800 (M5 Timeframe)", style={
-            'marginTop': '0'
-        }),
+        html.Div(style={'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center'}, children=[
+            html.Div(children=[
+                html.H1("Smart Flow Scalper Dashboard", style={
+                    'marginBottom': '5px',
+                    'color': DARK_THEME['accent']
+                }),
+                html.H3(id='symbol-title', children="GainX 800 (M5 Timeframe)", style={
+                    'marginTop': '0'
+                }),
+            ]),
+            html.Div(style={'minWidth': '220px'}, children=[
+                html.Label("Select Symbol", style={'display': 'block', 'marginBottom': '5px', 'color': '#999'}),
+                dcc.Dropdown(
+                    id='symbol-dropdown',
+                    options=[{'label': symbol, 'value': symbol} for symbol in AVAILABLE_SYMBOLS],
+                    value='GainX 800',
+                    style={
+                        'backgroundColor': DARK_THEME['panel'],
+                        'color': 'white',
+                        'border': f'1px solid {DARK_THEME["grid"]}',
+                    }
+                ),
+            ]),
+        ]),
+        # Add connection controls here
         html.Div(style={'display': 'flex', 'alignItems': 'center', 'marginTop': '10px'}, children=[
             html.Div(id='connection-status', style={
                 'backgroundColor': DARK_THEME['sell'],  # Will update based on connection
@@ -180,7 +235,14 @@ app.layout = html.Div(style={
             }),
             # Hidden elements to store API status
             dcc.Store(id='api-status', data='disconnected'),
-        ])
+        ]),
+        html.Div(id='symbol-details', style={
+            'marginTop': '15px',
+            'padding': '10px',
+            'backgroundColor': 'rgba(0,0,0,0.2)',
+            'borderRadius': '4px',
+            'fontSize': '14px'
+        })
     ]),
     
     # Main content
@@ -355,6 +417,44 @@ def handle_connection(connect_clicks, disconnect_clicks):
             return 'disconnected', 'Disconnected', {'backgroundColor': DARK_THEME['sell'], 'padding': '5px 10px', 'borderRadius': '4px', 'marginRight': '15px', 'fontWeight': 'bold'}
     
     return 'disconnected', 'Disconnected', {'backgroundColor': DARK_THEME['sell'], 'padding': '5px 10px', 'borderRadius': '4px', 'marginRight': '15px', 'fontWeight': 'bold'}
+
+# Add this callback after your connection callback
+@app.callback(
+    [Output('symbol-title', 'children'),
+     Output('symbol-details', 'children')],
+    [Input('symbol-dropdown', 'value')]
+)
+def update_symbol_selection(selected_symbol):
+    settings = SYMBOL_SETTINGS.get(selected_symbol, {})
+    
+    # Create symbol details panel
+    details = [
+        html.Div([
+            html.Span("Bias: ", style={'fontWeight': 'bold', 'marginRight': '5px'}),
+            html.Span(settings.get('bias', 'neutral').capitalize(), style={
+                'color': {
+                    'bullish': '#26A69A', 
+                    'bearish': '#F44336',
+                    'neutral': '#FFC107'
+                }.get(settings.get('bias', 'neutral'), 'white')
+            })
+        ]),
+        html.Div([
+            html.Span("Volatility: ", style={'fontWeight': 'bold', 'marginRight': '5px'}),
+            html.Span(settings.get('volatility', 'medium').capitalize())
+        ]),
+        html.Div([
+            html.Span("Recommended lot size: ", style={'fontWeight': 'bold', 'marginRight': '5px'}),
+            html.Span(settings.get('recommended_lot', '0.01-0.05'))
+        ]),
+        html.Div([
+            html.Span("Description: ", style={'fontWeight': 'bold', 'marginRight': '5px'}),
+            html.Span(settings.get('description', '-'))
+        ]),
+    ]
+    
+    # Return the new title and details
+    return f"{selected_symbol} (M5 Timeframe)", details
 
 # Update your main dashboard callback to fetch from API
 @app.callback(

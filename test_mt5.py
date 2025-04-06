@@ -1,6 +1,7 @@
 import MetaTrader5 as mt5
 import os
 import sys
+import platform
 
 # Print Python version and architecture
 print(f"Python version: {sys.version}")

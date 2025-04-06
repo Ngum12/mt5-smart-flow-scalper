@@ -1,0 +1,95 @@
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes glow {
+  0% { box-shadow: 0 0 5px rgba(0, 183, 255, 0.5); }
+  50% { box-shadow: 0 0 20px rgba(0, 183, 255, 0.8); }
+  100% { box-shadow: 0 0 5px rgba(0, 183, 255, 0.5); }
+}
+
+@keyframes loading-dot {
+  0% { opacity: 0.2; transform: scale(1); }
+  20% { opacity: 1; transform: scale(1.2); }
+  100% { opacity: 0.2; transform: scale(1); }
+}
+
+.loading-dots span {
+  font-size: 30px;
+  animation: loading-dot 1.4s infinite;
+  display: inline-block;
+}
+
+/* Animations for symbol switching */
+.symbol-change {
+  animation: fadeIn 0.5s;
+}
+
+.signal-flash {
+  animation: pulse 1s;
+}
+
+/* Symbol transition effects */
+.symbol-transition-container {
+  transition: all 0.5s ease;
+}
+
+/* Strategy adaptation panel */
+.parameter-bar {
+  height: 20px;
+  background-color: rgba(0,0,0,0.2);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.parameter-value {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 1s ease-in-out, background-color 0.5s ease;
+}
+
+/* AI Analysis styling */
+.analysis-container {
+  animation: fadeIn 0.5s;
+}
+
+.analysis-container b {
+  color: #00B7FF;
+  font-weight: bold;
+}
+
+.analysis-container i {
+  opacity: 0.8;
+  font-style: italic;
+}
+
+/* Optimized parameters display */
+.optimized-parameter {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.parameter-label {
+  width: 100px;
+  flex-shrink: 0;
+}
+
+.parameter-bar-container {
+  flex: 1;
+  background-color: rgba(0,0,0,0.2);
+  border-radius: 4px;
+  margin-left: 10px;
+  position: relative;
+  height: 20px;
+  overflow: hidden;
+}

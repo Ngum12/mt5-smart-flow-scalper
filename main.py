@@ -1,8 +1,10 @@
 import MetaTrader5 as mt5
 import pandas as pd
+import threading
+import time
 from src.mt5_connector import initialize_mt5
 from src.strategies.smart_flow_scalper import SmartFlowScalper
-from src.dashboard.app import run_dashboard
+from src.dashboard.app_new import run_dashboard
 
 def list_available_symbols():
     """List symbols available in MT5"""
@@ -18,27 +20,57 @@ def list_available_symbols():
         print(f"- {symbol}")
 
 def main(with_dashboard=True):
-    # Initialize connection to MetaTrader 5
+    # Initialize MT5
     if not initialize_mt5():
-        print("Failed to initialize MT5. Exiting...")
+        print("Failed to initialize MT5. Exiting.")
         return
-
-    # Create an instance of the Smart Flow Scalper strategy
-    scalper = SmartFlowScalper(
-        symbol="GainX 800",
-        timeframe=mt5.TIMEFRAME_M5,
-        lot_size=0.01
-    )
-
-    # Run the trading strategy
-    if not with_dashboard:
-        scalper.run()  # Run strategy in continuous mode
-    else:
-        # Just run it once if dashboard will be handling updates
-        scalper.execute_trades()
-        print("Starting dashboard at http://127.0.0.1:8050")
-        print("(If browser doesn't open, copy this URL manually)")
-        run_dashboard()  # Run the dashboard, which handles strategy updates
+    
+    # Define available symbols
+    symbols = [
+        "GainX 800",
+        "PainX 800",
+        "GainX 600",
+        "PainX 600", 
+        "GainX 400",
+        "PainX 999",
+        "GainX 999",
+        "PainX 1200", 
+        "GainX 1200"
+    ]
+    
+    # Create a strategy instance for each symbol
+    strategies = {}
+    for symbol in symbols:
+        strategies[symbol] = SmartFlowScalper(
+            symbol=symbol,
+            timeframe=mt5.TIMEFRAME_M5,
+            auto_optimize=True  # Auto-optimize parameters based on symbol
+        )
+    
+    # Start the dashboard in a separate thread if enabled
+    if with_dashboard:
+        dashboard_thread = threading.Thread(target=run_dashboard)
+        dashboard_thread.daemon = True
+        dashboard_thread.start()
+        print("Dashboard started in background thread")
+    
+    # Run all strategies in a loop
+    try:
+        while True:
+            for symbol, strategy in strategies.items():
+                try:
+                    print(f"\nChecking {symbol}...")
+                    strategy.execute_trades()
+                except Exception as e:
+                    print(f"Error executing trades for {symbol}: {e}")
+            
+            # Sleep between checks
+            time.sleep(60)
+            
+    except KeyboardInterrupt:
+        print("Strategy execution stopped by user")
+    finally:
+        mt5.shutdown()
 
 if __name__ == "__main__":
     import sys

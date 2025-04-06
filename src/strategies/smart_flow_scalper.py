@@ -2,6 +2,7 @@ import MetaTrader5 as mt5
 import pandas as pd
 import numpy as np
 import time
+import json
 from datetime import datetime, timedelta
 from ..indicators.ma_indicators import calculate_ema
 from ..indicators.rsi import calculate_rsi
@@ -10,30 +11,241 @@ from ..indicators.volume_indicators import calculate_volume_indicator
 from ..indicators.volatility_indicators import calculate_atr
 
 class SmartFlowScalper:
-    def __init__(self, symbol, timeframe, lot_size):
+    def __init__(self, symbol, timeframe, lot_size=0.01, auto_optimize=True):
         self.symbol = symbol
         self.timeframe = timeframe
         self.lot_size = lot_size
+        self.auto_optimize = auto_optimize
         
-        # Strategy parameters
+        # Default parameters (will be overridden if auto_optimize=True)
         self.ema_short = 20
         self.ema_long = 50
         self.rsi_period = 14
         self.rsi_overbought = 70
         self.rsi_oversold = 30
-        self.rsi_middle = 50
         self.macd_fast = 12
         self.macd_slow = 26
         self.macd_signal = 9
+        self.atr_period = 14
+        self.atr_multiplier = 2.0
+        self.reward_risk_ratio = 1.5
         
-        # Risk management parameters
-        self.risk_percent = 1.0        # Risk 1% of account per trade
-        self.atr_period = 14           # Period for ATR calculation
-        self.atr_multiplier = 2.0      # Multiple of ATR for stop loss
-        self.reward_risk_ratio = 2.0   # Reward to risk ratio
-        self.use_trailing_stop = True  # Enable trailing stops
+        # Add this line to define the missing attribute
+        self.use_trailing_stop = True  # Enable trailing stops by default
         
-        print(f"Smart Flow Scalper initialized for {symbol} on M{timeframe} timeframe")
+        # Risk parameters
+        self.risk_percent = 1.0  # Risk 1% of balance per trade
+        
+        # If auto-optimize is enabled, adjust parameters based on symbol
+        if auto_optimize:
+            self._optimize_for_symbol()
+        
+        self.logger = self._setup_logger()
+        self.logger.info(f"Smart Flow Scalper initialized for {symbol} with {'auto-optimized' if auto_optimize else 'default'} parameters")
+        self.logger.info(f"Parameters: EMA {self.ema_short}/{self.ema_long}, RSI {self.rsi_oversold}/{self.rsi_overbought}, ATR {self.atr_multiplier}x")
+
+    def _optimize_for_symbol(self):
+        """Optimize strategy parameters based on symbol characteristics"""
+        symbol_info = self._get_symbol_type()
+        
+        # Load optimization history if available
+        optimization_path = f"data/optimization_{self.symbol.replace(' ', '_')}.json"
+        try:
+            with open(optimization_path, 'r') as f:
+                optimization_data = json.load(f)
+                self.logger.info(f"Loaded optimization history for {self.symbol}")
+        except (FileNotFoundError, json.JSONDecodeError):
+            optimization_data = {"iterations": 0, "best_params": {}}
+        
+        # Symbol type-based optimization
+        if "GainX" in self.symbol:
+            # GainX series - optimize for bullish bias
+            if "1200" in self.symbol:  # Extreme volatility
+                self.ema_short = 10
+                self.ema_long = 30
+                self.rsi_overbought = 75  # Higher threshold due to bullish bias
+                self.rsi_oversold = 30
+                self.atr_multiplier = 2.5  # Wider stops for volatility
+            elif "999" in self.symbol:  # Very high volatility
+                self.ema_short = 12
+                self.ema_long = 35
+                self.rsi_overbought = 73
+                self.rsi_oversold = 30
+                self.atr_multiplier = 2.3
+            elif "800" in self.symbol:  # High volatility
+                self.ema_short = 15
+                self.ema_long = 40
+                self.rsi_overbought = 72
+                self.rsi_oversold = 30
+                self.atr_multiplier = 2.0
+            elif "600" in self.symbol:  # Medium-high volatility
+                self.ema_short = 18
+                self.ema_long = 45
+                self.rsi_overbought = 71
+                self.rsi_oversold = 32
+                self.atr_multiplier = 1.8
+            else:  # 400 or other - Medium volatility
+                self.ema_short = 20
+                self.ema_long = 50
+                self.rsi_overbought = 70
+                self.rsi_oversold = 35
+                self.atr_multiplier = 1.5
+            
+            # MACD adjustments for bullish bias
+            self.macd_fast = 10
+            self.macd_slow = 24
+            self.macd_signal = 8
+            
+        elif "PainX" in self.symbol:
+            # PainX series - optimize for bearish bias
+            if "1200" in self.symbol:  # Extreme volatility
+                self.ema_short = 10
+                self.ema_long = 30
+                self.rsi_overbought = 70
+                self.rsi_oversold = 25  # Lower threshold due to bearish bias
+                self.atr_multiplier = 2.5  # Wider stops for volatility
+            elif "999" in self.symbol:  # Very high volatility
+                self.ema_short = 12
+                self.ema_long = 35
+                self.rsi_overbought = 68
+                self.rsi_oversold = 27
+                self.atr_multiplier = 2.3
+            elif "800" in self.symbol:  # High volatility
+                self.ema_short = 15
+                self.ema_long = 40
+                self.rsi_overbought = 67
+                self.rsi_oversold = 28
+                self.atr_multiplier = 2.0
+            elif "600" in self.symbol:  # Medium-high volatility
+                self.ema_short = 18
+                self.ema_long = 45
+                self.rsi_overbought = 65
+                self.rsi_oversold = 30
+                self.atr_multiplier = 1.8
+            else:  # 400 or other - Medium volatility
+                self.ema_short = 20
+                self.ema_long = 50
+                self.rsi_overbought = 65
+                self.rsi_oversold = 30
+                self.atr_multiplier = 1.5
+                
+            # MACD adjustments for bearish bias
+            self.macd_fast = 12
+            self.macd_slow = 26
+            self.macd_signal = 9
+        
+        # Apply any saved optimization improvements
+        if optimization_data.get("best_params"):
+            best_params = optimization_data["best_params"]
+            # Apply optimized parameters but limit how far they can deviate
+            self.ema_short = max(5, min(30, int(best_params.get("ema_short", self.ema_short))))
+            self.ema_long = max(20, min(100, int(best_params.get("ema_long", self.ema_long))))
+            self.rsi_overbought = max(60, min(80, best_params.get("rsi_overbought", self.rsi_overbought)))
+            self.rsi_oversold = max(20, min(40, best_params.get("rsi_oversold", self.rsi_oversold)))
+            
+        # Save volatility info for later reference
+        self.symbol_volatility = self._get_volatility_category(self.symbol)
+        self.symbol_bias = "bullish" if "GainX" in self.symbol else "bearish" if "PainX" in self.symbol else "neutral"
+
+    def _get_volatility_category(self, symbol):
+        """Get volatility category based on the symbol name"""
+        if "1200" in symbol:
+            return "extreme"
+        elif "999" in symbol:
+            return "very high"
+        elif "800" in symbol:
+            return "high"
+        elif "600" in symbol:
+            return "medium-high"
+        elif "400" in symbol:
+            return "medium"
+        else:
+            return "unknown"
+
+    def _get_symbol_type(self):
+        """Determine symbol type and characteristics"""
+        
+        if "GainX" in self.symbol:
+            bias = "bullish"
+            index_type = "gain"
+        elif "PainX" in self.symbol:
+            bias = "bearish"
+            index_type = "pain"
+        else:
+            bias = "neutral"
+            index_type = "unknown"
+        
+        # Extract the number part
+        try:
+            number = int(''.join(filter(str.isdigit, self.symbol)))
+        except:
+            number = 0
+        
+        # Estimate volatility based on the number
+        if number >= 1200:
+            volatility = "extreme"
+        elif number >= 999:
+            volatility = "very high"
+        elif number >= 800:
+            volatility = "high"
+        elif number >= 600:
+            volatility = "medium-high"
+        elif number >= 400:
+            volatility = "medium"
+        else:
+            volatility = "low"
+            
+        return {
+            "name": self.symbol,
+            "bias": bias,
+            "type": index_type,
+            "number": number,
+            "volatility": volatility
+        }
+
+    def _setup_logger(self):
+        """Set up a logger for the strategy"""
+        import logging
+        import sys
+        
+        # Create a logger
+        logger = logging.getLogger(f"smart_flow_scalper_{self.symbol}")
+        logger.setLevel(logging.INFO)
+        
+        # Create a formatter without emoji characters for console output
+        console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        
+        # Create console handler with UTF-8 encoding
+        console_handler = logging.StreamHandler(stream=sys.stdout)  # Use stdout explicitly
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(console_formatter)
+        
+        # Add the handler to the logger
+        logger.addHandler(console_handler)
+        
+        # Try to create a file handler if log directory exists
+        try:
+            import os
+            log_dir = "logs"
+            
+            # Create log directory if it doesn't exist
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+                
+            # Create a file handler - file can handle emojis
+            file_handler = logging.FileHandler(
+                f"{log_dir}/smart_flow_scalper_{self.symbol.replace(' ', '_')}.log",
+                encoding='utf-8'  # Specify UTF-8 encoding
+            )
+            file_handler.setLevel(logging.INFO)
+            file_handler.setFormatter(console_formatter)
+            
+            # Add the handler to the logger
+            logger.addHandler(file_handler)
+        except Exception as e:
+            logger.warning(f"Failed to set up file logging: {e}")
+        
+        return logger
 
     def get_data(self, bars=100):
         """Get historical data for the symbol"""
@@ -144,152 +356,266 @@ class SmartFlowScalper:
 
     def execute_trades(self):
         """Execute trades based on the generated signals"""
-        data = self.get_data(bars=100)
-        signals = self.generate_signals(data)
-        
-        # Skip if we have no data
-        if len(signals) == 0:
-            return
-        
-        # First, manage existing positions (trailing stops)
-        self.manage_open_positions()
-        
-        # Print the latest prices and indicators
-        latest = signals.iloc[-1]
-        print(f"\nLatest data for {self.symbol} at {latest['time']}:")
-        print(f"Price: {latest['close']:.2f}")
-        
-        # Only print indicators if they exist and are not NaN
-        if 'ema_short' in latest and not pd.isna(latest['ema_short']):
-            print(f"EMA 20: {latest['ema_short']:.2f}")
-        if 'ema_long' in latest and not pd.isna(latest['ema_long']):
-            print(f"EMA 50: {latest['ema_long']:.2f}")
-        if 'rsi' in latest and not pd.isna(latest['rsi']):
-            print(f"RSI: {latest['rsi']:.2f}")
-        if 'macd' in latest and 'macd_signal' in latest and not pd.isna(latest['macd']) and not pd.isna(latest['macd_signal']):
-            print(f"MACD: {latest['macd']:.2f}, Signal: {latest['macd_signal']:.2f}")
-        
-        # Check for signals
-        recent_signals = signals.iloc[-5:]  # Look at the last 5 candles for signals
-        
-        # Get open positions to avoid duplicate entries
-        positions = mt5.positions_get(symbol=self.symbol)
-        has_open_position = positions is not None and len(positions) > 0
-        
-        if not has_open_position:  # Only enter new trades if we don't have an open position
-            if recent_signals['buy_signal'].any():
-                buy_index = recent_signals[recent_signals['buy_signal']].index[-1]
-                buy_price = signals.loc[buy_index, 'close']
-                print(f"\n🟢 BUY SIGNAL detected at {signals.loc[buy_index, 'time']} (price: {buy_price:.2f})")
-                self.place_order(mt5.ORDER_TYPE_BUY)
+        try:
+            data = self.get_data(bars=100)
+            if data.empty:
+                self.logger.warning(f"No data received for {self.symbol}, skipping execution")
+                return
+
+            signals = self.generate_signals(data)
             
-            elif recent_signals['sell_signal'].any():
-                sell_index = recent_signals[recent_signals['sell_signal']].index[-1]
-                sell_price = signals.loc[sell_index, 'close']
-                print(f"\n🔴 SELL SIGNAL detected at {signals.loc[sell_index, 'time']} (price: {sell_price:.2f})")
-                self.place_order(mt5.ORDER_TYPE_SELL)
+            # Skip if we have no data
+            if len(signals) == 0:
+                return
             
+            # First, manage existing positions (trailing stops)
+            self.manage_open_positions()
+            
+            # Print the latest prices and indicators
+            latest = signals.iloc[-1]
+            self.logger.info(f"Latest data for {self.symbol} at {latest['time']}:")
+            self.logger.info(f"Price: {latest['close']:.2f}")
+            
+            # Only print indicators if they exist and are not NaN
+            if 'ema_short' in latest and not pd.isna(latest['ema_short']):
+                self.logger.info(f"EMA {self.ema_short}: {latest['ema_short']:.2f}")
+            if 'ema_long' in latest and not pd.isna(latest['ema_long']):
+                self.logger.info(f"EMA {self.ema_long}: {latest['ema_long']:.2f}")
+            if 'rsi' in latest and not pd.isna(latest['rsi']):
+                self.logger.info(f"RSI: {latest['rsi']:.2f}")
+            if 'macd' in latest and 'macd_signal' in latest and not pd.isna(latest['macd']) and not pd.isna(latest['macd_signal']):
+                self.logger.info(f"MACD: {latest['macd']:.2f}, Signal: {latest['macd_signal']:.2f}")
+            
+            # Check for signals
+            recent_signals = signals.iloc[-5:]  # Look at the last 5 candles for signals
+            
+            # Get open positions to avoid duplicate entries
+            positions = mt5.positions_get(symbol=self.symbol)
+            has_open_position = positions is not None and len(positions) > 0
+            
+            # ENHANCED: Check if we have an open position matching our strategy
+            our_position = False
+            if has_open_position:
+                for position in positions:
+                    if position.magic == 12345:  # Only check positions from our EA
+                        our_position = True
+                        break
+            
+            # ENHANCED: Only block new trades if we have our own position open
+            if not our_position:  # Changed from has_open_position to our_position
+                if recent_signals['buy_signal'].any() or recent_signals['sell_signal'].any():
+                    # Try to close existing positions first if we're getting error 10027
+                    self.close_all_positions()
+                    
+                    # Then proceed with opening new position
+                    if recent_signals['buy_signal'].any():
+                        buy_index = recent_signals[recent_signals['buy_signal']].index[-1]
+                        buy_price = signals.loc[buy_index, 'close']
+                        self.logger.info(f"BUY SIGNAL detected at {signals.loc[buy_index, 'time']} (price: {buy_price:.2f})")
+                        
+                        # Place the trade with retry logic
+                        for attempt in range(3):  # Try up to 3 times
+                            result = self.place_order(mt5.ORDER_TYPE_BUY)
+                            if result:
+                                self.logger.info(f"BUY order executed successfully after {attempt+1} attempts")
+                                break
+                            else:
+                                self.logger.warning(f"BUY order failed, attempt {attempt+1}/3")
+                                time.sleep(1)  # Wait before retry
+                    
+                    elif recent_signals['sell_signal'].any():
+                        sell_index = recent_signals[recent_signals['sell_signal']].index[-1]
+                        sell_price = signals.loc[sell_index, 'close']
+                        self.logger.info(f"SELL SIGNAL detected at {signals.loc[sell_index, 'time']} (price: {sell_price:.2f})")
+                        
+                        # Place the trade with retry logic
+                        for attempt in range(3):  # Try up to 3 times
+                            result = self.place_order(mt5.ORDER_TYPE_SELL)
+                            if result:
+                                self.logger.info(f"SELL order executed successfully after {attempt+1} attempts")
+                                break
+                            else:
+                                self.logger.warning(f"SELL order failed, attempt {attempt+1}/3")
+                                time.sleep(1)  # Wait before retry
+                    
+                    else:
+                        self.logger.info("No trading signals detected")
             else:
-                print("\nNo trading signals detected")
-        else:
-            print("\nSkipping new entries due to existing position")
+                self.logger.info(f"Skipping new entries due to existing position for {self.symbol}")
+        
+        except Exception as e:
+            self.logger.error(f"Error in execute_trades: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
 
     def place_order(self, order_type):
         """Place a market order with dynamic position sizing"""
         action = "BUY" if order_type == mt5.ORDER_TYPE_BUY else "SELL"
-        print(f"Preparing {action} order for {self.symbol}...")
+        self.logger.info(f"Preparing {action} order for {self.symbol}...")
         
-        # Get symbol info
-        symbol_info = mt5.symbol_info(self.symbol)
-        if symbol_info is None:
-            print(f"Failed to get symbol info for {self.symbol}")
-            return
+        try:
+            # Check if autotrading is enabled
+            if not mt5.terminal_info().trade_allowed:
+                self.logger.error("AutoTrading is disabled in MT5! Order cannot be placed.")
+                self.logger.error("Enable AutoTrading in MT5 by clicking the 'AutoTrading' button or pressing Alt+T")
+                return False
+                
+            # Get symbol info
+            symbol_info = mt5.symbol_info(self.symbol)
+            if symbol_info is None:
+                self.logger.error(f"Failed to get symbol info for {self.symbol}: {mt5.last_error()}")
+                return False
+                
+            # Ensure the symbol is available in Market Watch
+            if not symbol_info.visible:
+                self.logger.info(f"Adding {self.symbol} to Market Watch...")
+                if not mt5.symbol_select(self.symbol, True):
+                    self.logger.error(f"Failed to select {self.symbol}: {mt5.last_error()}")
+                    return False
             
-        # Ensure the symbol is available in Market Watch
-        if not symbol_info.visible:
-            if not mt5.symbol_select(self.symbol, True):
-                print(f"Failed to select {self.symbol}")
-                return
-        
-        # Get the current price
-        tick = mt5.symbol_info_tick(self.symbol)
-        price = tick.ask if order_type == mt5.ORDER_TYPE_BUY else tick.bid
-        
-        # Get account info for position sizing
-        account_info = mt5.account_info()
-        if account_info is None:
-            print("Failed to get account info")
-            return
-        
-        # Get latest data for ATR-based stops
-        data = self.get_data(bars=self.atr_period + 10)  # Get enough bars for ATR
-        if len(data) == 0:
-            print("Failed to get price data for stop calculation")
-            return
-        
-        # Calculate ATR
-        atr_value = calculate_atr(data['high'], data['low'], data['close'], self.atr_period)[-1]
-        if np.isnan(atr_value):
-            print("ATR value is NaN, using fixed pip stop instead")
-            atr_value = 30 * symbol_info.point  # Default to 30 pips
-        
-        # Calculate dynamic stop loss in price terms
-        stop_distance = self.atr_multiplier * atr_value
-        
-        # Set stop loss and take profit levels
-        if order_type == mt5.ORDER_TYPE_BUY:
-            sl = price - stop_distance
-            tp = price + (stop_distance * self.reward_risk_ratio)
-        else:
-            sl = price + stop_distance
-            tp = price - (stop_distance * self.reward_risk_ratio)
-        
-        # Calculate position size based on risk percentage
-        risk_amount = account_info.balance * (self.risk_percent / 100)
-        stop_distance_pips = stop_distance / symbol_info.point
-        
-        # Value per pip calculation
-        pip_value = symbol_info.trade_tick_value * (symbol_info.trade_tick_size / symbol_info.point)
-        
-        # Position size in lots
-        if stop_distance_pips > 0 and pip_value > 0:
-            position_size = risk_amount / (stop_distance_pips * pip_value)
-            # Round to nearest lot step
-            position_size = round(position_size / symbol_info.volume_step) * symbol_info.volume_step
-            # Apply minimum and maximum lot size constraints
-            position_size = max(min(position_size, symbol_info.volume_max), symbol_info.volume_min)
-        else:
-            position_size = self.lot_size  # Fallback to fixed lot size
-        
-        print(f"Risk-based position sizing: {position_size:.2f} lots (risking {self.risk_percent}% = ${risk_amount:.2f})")
-        
-        # Prepare the request
-        request = {
-            "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": self.symbol,
-            "volume": position_size,
-            "type": order_type,
-            "price": price,
-            "sl": round(sl, symbol_info.digits),  # Stop Loss
-            "tp": round(tp, symbol_info.digits),  # Take Profit
-            "deviation": 20,  # maximum price deviation in points
-            "magic": 12345,   # unique identifier
-            "comment": "Smart Flow Scalper",
-            "type_time": mt5.ORDER_TIME_GTC,  # Good Till Canceled
-        }
-        
-        # Send the order request
-        result = mt5.order_send(request)
-        
-        # Check the result
-        if result.retcode != mt5.TRADE_RETCODE_DONE:
-            print(f"Order failed: {result.retcode, mt5.last_error()}")
-        else:
-            print(f"Order placed successfully: {action} {position_size} lot(s) of {self.symbol} at {price}")
-            print(f"Stop Loss: {sl}, Take Profit: {tp} (ATR: {atr_value:.2f})")
+            # Get the current price
+            tick = mt5.symbol_info_tick(self.symbol)
+            if tick is None:
+                self.logger.error(f"Failed to get current price for {self.symbol}: {mt5.last_error()}")
+                return False
+                
+            price = tick.ask if order_type == mt5.ORDER_TYPE_BUY else tick.bid
             
-            # Add notification here
-            self.send_notification(f"{action} SIGNAL: {self.symbol} at {price}")
+            # Get account info for position sizing
+            account_info = mt5.account_info()
+            if account_info is None:
+                self.logger.error(f"Failed to get account info: {mt5.last_error()}")
+                return False
+            
+            # Get latest data for ATR-based stops
+            data = self.get_data(bars=self.atr_period + 10)  # Get enough bars for ATR
+            if len(data) == 0:
+                self.logger.error("Failed to get price data for stop calculation")
+                return False
+            
+            # Calculate ATR
+            atr_value = calculate_atr(data['high'], data['low'], data['close'], self.atr_period)[-1]
+            if np.isnan(atr_value):
+                self.logger.warning("ATR value is NaN, using fixed pip stop instead")
+                atr_value = 30 * symbol_info.point  # Default to 30 pips
+            
+            # Calculate dynamic stop loss in price terms
+            stop_distance = self.atr_multiplier * atr_value
+            
+            # Set stop loss and take profit levels
+            if order_type == mt5.ORDER_TYPE_BUY:
+                sl = price - stop_distance
+                tp = price + (stop_distance * self.reward_risk_ratio)
+            else:
+                sl = price + stop_distance
+                tp = price - (stop_distance * self.reward_risk_ratio)
+            
+            # Calculate position size based on risk percentage
+            risk_amount = account_info.balance * (self.risk_percent / 100)
+            stop_distance_pips = stop_distance / symbol_info.point
+            
+            # Value per pip calculation
+            pip_value = symbol_info.trade_tick_value * (symbol_info.trade_tick_size / symbol_info.point)
+            
+            # Position size in lots
+            if stop_distance_pips > 0 and pip_value > 0:
+                position_size = risk_amount / (stop_distance_pips * pip_value)
+                # Round to nearest lot step
+                position_size = round(position_size / symbol_info.volume_step) * symbol_info.volume_step
+                # Apply minimum and maximum lot size constraints
+                position_size = max(min(position_size, symbol_info.volume_max), symbol_info.volume_min)
+            else:
+                position_size = self.lot_size  # Fallback to fixed lot size
+            
+            self.logger.info(f"Risk-based position sizing: {position_size:.2f} lots (risking {self.risk_percent}% = ${risk_amount:.2f})")
+            
+            # ENHANCED: Check if position size is too small
+            if position_size < symbol_info.volume_min:
+                self.logger.warning(f"Calculated position size {position_size} is below minimum {symbol_info.volume_min}, using minimum")
+                position_size = symbol_info.volume_min
+            
+            # Convert NumPy values to Python native types
+            sl = float(sl)
+            tp = float(tp)
+            price = float(price)
+            position_size = float(position_size)
+            
+            # Round prices to proper digits
+            sl = round(sl, symbol_info.digits)
+            tp = round(tp, symbol_info.digits)
+            price = round(price, symbol_info.digits)
+            
+            # Prepare the request
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": self.symbol,
+                "volume": position_size,
+                "type": order_type,
+                "price": price,
+                "sl": sl,  # Now using Python float
+                "tp": tp,  # Now using Python float
+                "deviation": 20,  # maximum price deviation in points
+                "magic": 12345,   # unique identifier
+                "comment": "Smart Flow Scalper",
+                "type_time": mt5.ORDER_TIME_GTC,  # Good Till Canceled
+                "type_filling": mt5.ORDER_FILLING_FOK,  # Fill or Kill
+            }
+            
+            # Send the order request
+            self.logger.info(f"Sending order: {request}")
+            result = mt5.order_send(request)
+            
+            # Check the result
+            if result is None:
+                self.logger.error(f"Order failed: MT5 returned None, error: {mt5.last_error()}")
+                return False
+                
+            if result.retcode != mt5.TRADE_RETCODE_DONE:
+                # ENHANCED: Log detailed error for specific error codes
+                error_code = result.retcode
+                error_details = {
+                    10004: "Trade request rejected - order already exists",
+                    10006: "Trade request rejected - no connection to trade server",
+                    10007: "Trade request rejected - invalid price",
+                    10008: "Trade request rejected - invalid stops",
+                    10009: "Trade request rejected - order was disabled",
+                    10010: "Trade request rejected - not enough money",
+                    10011: "Trade request rejected - selling prohibited",
+                    10013: "Trade request rejected - trading disabled",
+                    10014: "Trade request rejected - not enough money",
+                    10015: "Trade request rejected - buying prohibited",
+                    10016: "Trade request rejected - insufficient margin",
+                    10017: "Trade request rejected - order limit reached",
+                    10018: "Trade request rejected - market closed",
+                    10019: "Trade request rejected - hedging prohibited",
+                    10020: "Trade request rejected - order prohibited by FIFO rule",
+                    10021: "Trade request rejected - volume too small",
+                    10022: "Trade request rejected - requote",
+                    10023: "Trade request rejected - order locked",
+                    10026: "Trade request rejected - volume limit exceeded",
+                    10027: "Trade request rejected - position would exceed maximum positions"
+                }
+                
+                error_description = error_details.get(error_code, "Unknown error")
+                
+                self.logger.error(f"Order failed: {error_code} - {error_description}")
+                self.logger.error(f"MT5 error details: {mt5.last_error()}")
+                self.logger.error(f"Result info: comment={result.comment}, request_id={result.request_id}")
+                
+                return False
+            else:
+                self.logger.info(f"Order placed successfully: {action} {position_size} lot(s) of {self.symbol} at {price}")
+                self.logger.info(f"Stop Loss: {sl}, Take Profit: {tp} (ATR: {atr_value:.2f})")
+                
+                # Add notification here
+                self.send_notification(f"{action} SIGNAL: {self.symbol} at {price}")
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"Error in place_order: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return False
 
     def send_notification(self, message):
         """Send notification of signal (can be extended to email/SMS/etc)"""
@@ -372,23 +698,119 @@ class SmartFlowScalper:
         else:
             print(f"Trailing stop moved to {new_sl:.2f} for position {ticket}")
 
+    def close_all_positions(self):
+        """Close all positions for this symbol"""
+        positions = mt5.positions_get(symbol=self.symbol)
+        if positions is None or len(positions) == 0:
+            return True
+        
+        success = True
+        for position in positions:
+            # Skip positions not created by our EA
+            if position.magic != 12345:
+                continue
+                
+            order_type = mt5.ORDER_TYPE_SELL if position.type == mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
+            
+            # Create the request
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": position.symbol,
+                "volume": position.volume,
+                "type": order_type,
+                "position": position.ticket,
+                "price": 0.0,  # Market order
+                "deviation": 20,
+                "magic": 12345,
+                "comment": "Smart Flow Scalper Close",
+                "type_time": mt5.ORDER_TIME_GTC,
+                "type_filling": mt5.ORDER_FILLING_FOK,
+            }
+            
+            # Send the order
+            result = mt5.order_send(request)
+            
+            if result.retcode != mt5.TRADE_RETCODE_DONE:
+                self.logger.error(f"Failed to close position {position.ticket}: {result.retcode}")
+                success = False
+            else:
+                self.logger.info(f"Successfully closed position {position.ticket}")
+        
+        return success
+
     def run(self):
         """Run the trading strategy continuously"""
-        print(f"Starting Smart Flow Scalper strategy for {self.symbol}...")
+        self.logger.info(f"Starting Smart Flow Scalper strategy for {self.symbol}...")
         try:
+            # Check MT5 connection first
+            if not mt5.initialize():
+                self.logger.error(f"MT5 initialization failed: {mt5.last_error()}")
+                self.logger.info("Attempting to reconnect...")
+                for i in range(3):
+                    if mt5.initialize():
+                        self.logger.info("MT5 reconnected successfully!")
+                        break
+                    time.sleep(5)
+                else:
+                    self.logger.error("Failed to reconnect to MT5 after 3 attempts. Exiting.")
+                    return
+            
             # Execute trades once initially
             self.execute_trades()
             
             # Run the strategy in a loop
+            check_count = 0
             while True:
-                time.sleep(60)  # Wait 1 minute between checks
-                print("\nChecking for new signals...")
-                self.execute_trades()
-                self.manage_open_positions()
+                # Sleep less time to be more responsive
+                time.sleep(20)  # Check every 20 seconds instead of 60
                 
+                check_count += 1
+                if check_count % 3 == 0:  # Full check every minute
+                    self.logger.info("\nRunning full signal check...")
+                    self.execute_trades()
+                else:
+                    # Quick position management check more frequently
+                    self.manage_open_positions()
+                    
         except KeyboardInterrupt:
-            print("Strategy stopped manually.")
+            self.logger.info("Strategy stopped manually.")
         except Exception as e:
-            print(f"Error in Smart Flow Scalper: {e}")
+            self.logger.error(f"Error in Smart Flow Scalper: {e}")
             import traceback
-            traceback.print_exc()
+            self.logger.error(traceback.format_exc())
+
+def check_max_positions():
+    """Check if we've reached the maximum allowed positions"""
+    # Get account info
+    account_info = mt5.account_info()
+    
+    # Get all open positions
+    positions = mt5.positions_get()
+    if positions is None:
+        return False, 0, "Failed to get positions"
+    
+    # Count positions
+    position_count = len(positions)
+    
+    # Check if we've reached the limit (usually around 100-200 positions based on broker)
+    max_positions = 100  # Default assumption - adjust based on your broker
+    
+    # Try to get the actual limit from account info if available
+    if hasattr(account_info, 'limit_positions'):
+        max_positions = account_info.limit_positions
+    
+    is_max_reached = position_count >= max_positions
+    
+    return is_max_reached, position_count, f"{position_count}/{max_positions}"
+
+# Add this check in your execute_trades function:
+def execute_trades(self):
+    # ... existing code ...
+    
+    # Check maximum positions before placing orders
+    max_reached, count, positions_info = check_max_positions()
+    if max_reached:
+        self.logger.warning(f"Maximum positions reached ({positions_info}). Cannot open new positions.")
+        return
+    
+    # ... rest of your code ...
