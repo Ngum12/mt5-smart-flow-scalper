@@ -1,17 +1,25 @@
-# Virtual Environment
+# Virtual Environments
 .new_venv/
 new_venv/
 venv/
-env/
 ENV/
+env/
+__pycache__/
 
 # Python cache files
-__pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 .pytest_cache/
+
+# Large data files
+*.csv
+*.xlsx
+*.pickle
+*.pkl
+*.h5
+*.hdf5
 
 # Distribution / packaging
 dist/
@@ -23,6 +31,10 @@ build/
 .vscode/
 *.swp
 *.swo
+
+# VS Code files
+.vscode/
+*.code-workspace
 
 # OS generated files
 .DS_Store
@@ -36,8 +48,18 @@ Thumbs.db
 # Local development settings
 .env
 *.log
+logs/
 
-# MT5 specific
+# MT5 specific files
 *.ex4
 *.ex5
 *.hst
+*.fxt
+experts.dat
+*.dat
+tester/
+
+# Other common large files
+*.zip
+*.tar.gz
+*.rar
